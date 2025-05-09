@@ -1,3 +1,3 @@
 n = float(input('Please enter a number: '))
-r = round(n, 2)
+r = round(n)
 print(r)
