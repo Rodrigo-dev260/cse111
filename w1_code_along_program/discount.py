@@ -1,0 +1,1 @@
+subtotal = input('Enter the subtotal:')
