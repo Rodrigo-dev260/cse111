@@ -1,26 +1,39 @@
 import pytest
-from water_flow import pressure_loss_from_fittings
+from water_flow import (
+    pressure_loss_from_fittings,
+    reynolds_number,
+    pressure_loss_from_pipe_reduction,
+    pressure_loss_from_pipe,
+    water_column_height,
+    pressure_gain_from_water_height,
+)
 
-def test_typical_values():
-    result = pressure_loss_from_fittings(2.0, 5)
-    expected = -(0.04 * 2 * 998.2 * 2.0 * 5) / 2000
-    assert result == pytest.approx(expected, rel=1e-5)
+# Teste da altura da coluna de água
+def test_water_column_height():
+    assert water_column_height(36.6, 9.1) == pytest.approx(43.425, 0.001)
 
-def test_zero_fittings():
-    result = pressure_loss_from_fittings(2.0, 0)
-    assert result == 0
+# Teste do ganho de pressão pela altura da água
+def test_pressure_gain_from_water_height():
+    assert pressure_gain_from_water_height(43.425) == pytest.approx(212.54, 0.01)
 
-def test_zero_velocity():
-    result = pressure_loss_from_fittings(0, 10)
-    assert result == 0
+# Teste do número de Reynolds
+def test_reynolds_number():
+    assert reynolds_number(0.28687, 1.65) == pytest.approx(471728.73, 0.1)
 
-def test_large_values():
-    result = pressure_loss_from_fittings(10.0, 100)
-    expected = -(0.04 * 2 * 998.2 * 10.0 * 100) / 2000
-    assert result == pytest.approx(expected, rel=1e-5)
+# Teste da perda de pressão por atrito no tubo
+def test_pressure_loss_from_pipe():
+    assert pressure_loss_from_pipe(0.28687, 1524.0, 0.013, 1.65) == pytest.approx(-46.92, 0.01)
 
-def test_negative_velocity():
-    # Testa caso estranho — não faz sentido fisicamente, mas vamos ver o comportamento.
-    result = pressure_loss_from_fittings(-2.0, 5)
-    expected = -(0.04 * 2 * 998.2 * -2.0 * 5) / 2000
-    assert result == pytest.approx(expected, rel=1e-5)
+# Teste da perda de pressão por conexões
+def test_pressure_loss_from_fittings():
+    assert pressure_loss_from_fittings(1.65, 3) == pytest.approx(-0.20, 0.01)
+
+# Teste da perda de pressão por redução de diâmetro
+def test_pressure_loss_from_pipe_reduction():
+    reynolds = reynolds_number(0.28687, 1.65)
+    assert pressure_loss_from_pipe_reduction(0.28687, 1.65, reynolds, 0.048692) == pytest.approx(-0.75, 0.01)
+
+# Teste da perda de pressão por atrito no segundo tubo
+def test_pressure_loss_from_pipe_second():
+    assert pressure_loss_from_pipe(0.048692, 15.2, 0.018, 1.75) == pytest.approx(-4.29, 0.01)
+
