@@ -1,6 +1,6 @@
 # example 5
 import math 
-# Define a funtcion amed main.
+# Define a funtcion named main.
 def main():
     # Get the radius and height from the user.
     radius = float(input('Enter the radius of the cylinder: '))
