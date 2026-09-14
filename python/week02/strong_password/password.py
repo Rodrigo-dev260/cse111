@@ -1,5 +1,6 @@
 import random
 
+# Character sets for complexity check and password generation
 LOWER = "abcdefghijklmnopqrstuvwxyz"
 UPPER = "ABCDEFGHIJKLMNOPQRSTUVWXYZ"
 DIGITS = "0123456789"
@@ -10,6 +11,7 @@ def word_in_file(word, filename, case_sensitive=False):
     try:
         with open(filename, 'r', encoding='utf-8') as file:
             for line in file:
+                # Compare lines based on case-sensitivity preference
                 if (case_sensitive and word == line.strip()) or (not case_sensitive and word.lower() == line.strip().lower()):
                     return True
     except FileNotFoundError:
@@ -22,6 +24,7 @@ def word_has_character(word, character_list):
 
 def word_complexity(word):
     """Calculates password complexity based on the types of characters used."""
+    # Add 1 point for each character type present
     complexity = 0
     complexity += word_has_character(word, LOWER)
     complexity += word_has_character(word, UPPER)
@@ -50,6 +53,7 @@ def generate_secure_password(length=16):
 
 def password_strength(password, min_length=10, strong_length=15):
     """Evaluates password strength and prints the appropriate message."""
+    # Check against known common passwords and dictionary words
     if word_in_file(password, 'wordlist.txt'):
         print("The password is a dictionary word and is not secure.")
         return 0
@@ -63,6 +67,7 @@ def password_strength(password, min_length=10, strong_length=15):
         print("The password is long, the length exceeds complexity, this is a good password.")
         return 5
     
+    # Calculate score based on character diversity and offer feedback
     score = 1 + word_complexity(password)
     improvements = suggest_improvements(password)
     print(f"Suggestions to improve password: {', '.join(improvements)}")
