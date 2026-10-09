@@ -1,0 +1,7 @@
+data_hora,produto,tipo,quantidade,saldo
+07/10/2026 11:31:06,Frango,ENTRADA,8,20
+07/10/2026 11:36:35,Frango,SAÍDA,4,16
+07/10/2026 17:40:02,Frango,ENTRADA,5,23
+07/10/2026 17:59:52,Frango,SAÍDA,3,20
+07/10/2026 18:56:15,Frango,ENTRADA,1,21
+07/10/2026 19:06:07,Frango,SAÍDA,1,20

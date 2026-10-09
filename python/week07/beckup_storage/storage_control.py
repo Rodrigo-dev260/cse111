@@ -1,8 +1,7 @@
-import os
-import sqlite3
-import requests
+import csv
 import datetime
-
+import sqlite3
+import os
 
 from kivy.app import App
 from kivy.uix.boxlayout import BoxLayout
@@ -126,30 +125,25 @@ def validar_data(data_str):
 
 def listar_produtos_banco():
 
-    url = "http://127.0.0.1:8000/produtos"
+    conexao = sqlite3.connect(BANCO)
 
-    try:
-        resposta = requests.get(url, timeout=5)
-        resposta.raise_for_status()
+    cursor = conexao.cursor()
 
-        dados = resposta.json()
+    cursor.execute("""
+        SELECT
+            id,
+            nome,
+            quantidade,
+            data_validade,
+            categoria
+        FROM produtos
+    """)
 
-        produtos = []
+    produtos = cursor.fetchall()
 
-        for produto in dados:
-            produtos.append((
-                produto["id"],
-                produto["nome"],
-                produto["quantidade"],
-                produto["data_validade"],
-                produto["categoria"]
-            ))
+    conexao.close()
 
-        return produtos
-
-    except requests.RequestException as erro:
-        print(f"Erro ao consultar API: {erro}")
-        return []
+    return produtos
 
 def atualizar_produto_banco(
     id_produto,
@@ -206,29 +200,19 @@ def produto_existe_banco(nome):
 
 def excluir_produto_banco(id_produto):
 
-    url = f"http://127.0.0.1:8000/produtos/{id_produto}"
+    conexao = sqlite3.connect(BANCO)
+    cursor = conexao.cursor()
 
-    try:
-        resposta = requests.delete(
-            url,
-            timeout=5
-        )
+    cursor.execute(
+        """
+        DELETE FROM produtos
+        WHERE id = ?
+        """,
+        (id_produto,)
+    )
 
-    except requests.RequestException as erro:
-        print(f"Erro ao conectar com a API: {erro}")
-        return False
-
-    if resposta.status_code == 404:
-        print("Produto não encontrado ou já excluído.")
-        return False
-
-    if not resposta.ok:
-        print(
-            f"Erro ao excluir produto: {resposta.status_code}"
-        )
-        return False
-
-    return True
+    conexao.commit()
+    conexao.close()
 
 def buscar_produto_banco(id_produto):
 
@@ -486,6 +470,12 @@ class EstoqueApp(App):
             )
             return
 
+        if produto_existe_banco(nome):
+            self.mostrar_mensagem(
+                f"O produto '{nome}' já está cadastrado."
+            )
+            return
+
         if quantidade_texto == "":
             self.mostrar_mensagem(
                 "Digite a quantidade."
@@ -519,46 +509,20 @@ class EstoqueApp(App):
             )
             return
 
-        dados = {
-            "nome": nome,
-            "quantidade": quantidade,
-            "data_validade": data_validade,
-            "categoria": categoria
-        }
+        inserir_produto_banco(
+            nome,
+            quantidade,
+            data_validade,
+            categoria
+        )
 
-        try:
-            resposta = requests.post(
-                "http://127.0.0.1:8000/produtos",
-                json=dados,
-                timeout=5
-            )
-
-        except requests.RequestException as erro:
-            self.mostrar_mensagem(
-                f"Erro ao conectar com a API:\n{erro}"
-            )
-            return
-
-        if resposta.status_code == 409:
-            self.mostrar_mensagem(
-                f"O produto '{nome}' já está cadastrado."
-            )
-            return
-
-        if resposta.status_code != 201:
-            self.mostrar_mensagem(
-                f"Erro ao cadastrar produto.\n"
-                f"Código: {resposta.status_code}"
-            )
-            return
-
-            self.mostrar_mensagem(
-                f"Produto cadastrado com sucesso!\n\n"
-                f"Produto: {nome}\n"
-                f"Quantidade: {quantidade}\n"
-                f"Validade: {data_validade}\n"
-                f"Categoria: {categoria}"
-            )
+        self.mostrar_mensagem(
+            f"Produto cadastrado com sucesso!\n\n"
+            f"Produto: {nome}\n"
+            f"Quantidade: {quantidade}\n"
+            f"Validade: {data_validade}\n"
+            f"Categoria: {categoria}"
+        )
 
     # --------------------------------------------------------
     # LISTAR PRODUTOS
@@ -643,7 +607,7 @@ class EstoqueApp(App):
 
         self.layout.add_widget(
             Label(
-                text="EDITAR PRODUTO - API",
+                text="EDITAR PRODUTO - SQLITE",
                 font_size=22,
                 size_hint_y=None,
                 height=50
@@ -819,51 +783,17 @@ class EstoqueApp(App):
             )
             return
 
-        dados = {
-            "nome": nome,
-        "quantidade": quantidade,
-        "data_validade": data_validade,
-        "categoria": categoria
-        }
-
-        url = f"http://127.0.0.1:8000/produtos/{id_produto}"
-
-        try:
-            resposta = requests.put(
-            url,
-                json=dados,
-            timeout=5
+        atualizar_produto_banco(
+            id_produto,
+            nome,
+            quantidade,
+            data_validade,
+            categoria
         )
 
-        except requests.RequestException as erro:
-            self.mostrar_mensagem(
-                f"Erro de comunicação com a API:\n{erro}\n\n"
-                "Confira os dados antes de tentar novamente."
-            )
-        return
-
-        if resposta.status_code == 404:
-            self.mostrar_mensagem(
-                "Produto não encontrado na API."
-            )
-        return
-
-        if resposta.status_code == 409:
-            self.mostrar_mensagem(
-                f"Já existe outro produto com o nome '{nome}'."
-            )
-            return
-
-        if not resposta.ok:
-            self.mostrar_mensagem(
-                f"Erro ao editar produto.\n"
-                f"Código: {resposta.status_code}"
-            )
-            return
-
-            self.mostrar_mensagem(
-                "Produto alterado com sucesso!"
-            )
+        self.mostrar_mensagem(
+            "Produto alterado com sucesso!"
+        )
 
     # --------------------------------------------------------
     # EXCLUIR PRODUTO
@@ -984,21 +914,12 @@ class EstoqueApp(App):
 
     def excluir_produto(self, id_produto, nome):
 
-        sucesso = excluir_produto_banco(id_produto)
+        excluir_produto_banco(id_produto)
 
-        if sucesso:
-            self.mostrar_mensagem(
-                f"Produto excluído com sucesso!\n\n"
-                f"Produto: {nome}\n"
-                f"ID: {id_produto}"
-            )
-
-        else:
-            self.mostrar_mensagem(
-                "Não foi possível excluir o produto.\n\n"
-                "Verifique a conexão com a API\n"
-                "e confira a lista antes de tentar novamente."
-            )
+        self.mostrar_mensagem(
+            f"{nome}\n"
+            f"foi excluído com sucesso!"
+        )
 
     # --------------------------------------------------------
     # ENTRADA DE ESTOQUE
@@ -1178,44 +1099,37 @@ class EstoqueApp(App):
 
         id_produto = self.entrada_id
 
-        url = f"http://127.0.0.1:8000/produtos/{id_produto}/entrada"
+        produto = buscar_produto_banco(id_produto)
 
-        try:
-            resposta = requests.post(
-                url,
-                json={"quantidade": quantidade_entrada},
-                timeout=5
-            )
-
-            if resposta.status_code == 404:
-                self.mostrar_mensagem(
-                    "Produto não encontrado na API."
-                )
-                return
-
-            resposta.raise_for_status()
-
-            # Consultar o estoque atualizado na API
-            resposta_produto = requests.get(
-                f"http://127.0.0.1:8000/produtos/{id_produto}",
-                timeout=5
-            )
-
-            resposta_produto.raise_for_status()
-
-            produto = resposta_produto.json()
-
-        except requests.RequestException as erro:
+        if produto is None:
             self.mostrar_mensagem(
-                f"Erro na comunicação com a API:\n{erro}"
+                "Produto não encontrado."
             )
             return
 
+        nome = produto[1]
+        estoque_atual = produto[2]
+
+        novo_estoque = estoque_atual + quantidade_entrada
+
+        atualizar_quantidade_banco(
+            id_produto,
+            novo_estoque
+        )
+
+        registrar_movimentacao_banco(
+            id_produto,
+            nome,
+            "ENTRADA",
+            quantidade_entrada,
+            novo_estoque
+        )
+
         self.mostrar_mensagem(
             f"Entrada registrada!\n\n"
-            f"Produto: {produto['nome']}\n"
+            f"Produto: {nome}\n"
             f"Entrada: {quantidade_entrada}\n"
-            f"Novo estoque: {produto['quantidade']}"
+            f"Novo estoque: {novo_estoque}"
         )
 
     # --------------------------------------------------------
@@ -1392,67 +1306,49 @@ class EstoqueApp(App):
 
         id_produto = self.saida_id
 
-        url = f"http://127.0.0.1:8000/produtos/{id_produto}/saida"
+        # Busca novamente o produto no SQLite
+        produto = buscar_produto_banco(id_produto)
 
-        try:
-            resposta = requests.post(
-                url,
-                json={"quantidade": quantidade_saida},
-                timeout=5
-            )
-
-        except requests.RequestException as erro:
+        if produto is None:
             self.mostrar_mensagem(
-                f"Erro de comunicação com a API:\n{erro}\n\n"
-                "Confira o estoque antes de tentar novamente."
+                "Produto não encontrado."
             )
             return
 
-        if resposta.status_code == 404:
+        nome = produto[1]
+        estoque_atual = produto[2]
+
+        # Impede estoque negativo
+        if quantidade_saida > estoque_atual:
+
             self.mostrar_mensagem(
-                "Produto não encontrado na API."
+                "Estoque insuficiente!\n\n"
+                f"Estoque disponível: {estoque_atual}\n"
+                f"Saída solicitada: {quantidade_saida}"
             )
             return
 
-        if resposta.status_code == 400:
-            self.mostrar_mensagem(
-                "Saída não autorizada pela API.\n"
-                "Verifique se existe estoque suficiente."
-            )
-            return
+        novo_estoque = estoque_atual - quantidade_saida
 
-        if not resposta.ok:
-            self.mostrar_mensagem(
-                f"Erro ao registrar saída.\n"
-                f"Código: {resposta.status_code}"
-            )
-            return
+        atualizar_quantidade_banco(
+            id_produto,
+            novo_estoque
+        )
 
-            # Consulta o produto atualizado
-        try:
-            resposta_produto = requests.get(
-                f"http://127.0.0.1:8000/produtos/{id_produto}",
-                timeout=5
-            )
+        registrar_movimentacao_banco(
+        id_produto,
+        nome,
+        "SAÍDA",
+        quantidade_saida,
+        novo_estoque
+        )
 
-            resposta_produto.raise_for_status()
-
-            produto = resposta_produto.json()
-
-        except requests.RequestException:
-            self.mostrar_mensagem(
-                "Saída aceita pela API!\n\n"
-                "Não foi possível consultar o novo estoque.\n"
-                "Atualize a lista de produtos para conferir."
-            )
-            return
-
-            self.mostrar_mensagem(
-                f"Saída registrada!\n\n"
-                f"Produto: {produto['nome']}\n"
-                f"Saída: {quantidade_saida}\n"
-                f"Novo estoque: {produto['quantidade']}"
-            )
+        self.mostrar_mensagem(
+            f"Saída registrada!\n\n"
+            f"Produto: {nome}\n"
+            f"Saída: {quantidade_saida}\n"
+            f"Novo estoque: {novo_estoque}"
+        )
 
         # --------------------------------------------------------
     # HISTÓRICO DE MOVIMENTAÇÕES
