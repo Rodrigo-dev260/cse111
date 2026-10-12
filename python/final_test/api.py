@@ -2,8 +2,12 @@ from pydantic import BaseModel, Field, field_validator
 import sqlite3
 import os
 import requests
-
+import psycopg
+from dotenv import load_dotenv
 from fastapi import FastAPI
+from fastapi import HTTPException
+
+load_dotenv()
 
 app = FastAPI()
 
@@ -99,6 +103,16 @@ def pagina_inicial():
         "mensagem": "API do Controle de Estoque funcionando!"
     }
 
+def conectar_supabase():
+    return psycopg.connect(
+        host=os.getenv("SUPABASE_HOST"),
+        port=int(os.getenv("SUPABASE_PORT", "5432")),
+        dbname=os.getenv("SUPABASE_DB"),
+        user=os.getenv("SUPABASE_USER"),
+        password=os.getenv("SUPABASE_PASSWORD"),
+        sslmode="require",
+        connect_timeout=10
+    )
 
 @app.get("/produtos")
 def consultar_produtos():
@@ -133,7 +147,6 @@ def consultar_produtos():
         })
 
     return produtos
-from fastapi import HTTPException
 
 
 @app.get("/produtos/{produto_id}")
@@ -168,6 +181,46 @@ def consultar_produto(produto_id: int):
         "data_validade": produto[3],
         "categoria": produto[4]
     }
+
+@app.get("/teste-supabase/produtos")
+def consultar_produtos_supabase():
+
+    try:
+        with conectar_supabase() as conexao:
+            with conexao.cursor() as cursor:
+
+                cursor.execute("""
+                    SELECT
+                        id,
+                        nome,
+                        quantidade,
+                        data_validade,
+                        categoria
+                    FROM public.produtos
+                    WHERE ativo = 1
+                    ORDER BY id
+                """)
+
+                registros = cursor.fetchall()
+
+    except psycopg.Error:
+        raise HTTPException(
+            status_code=503,
+            detail="Não foi possível consultar o Supabase."
+        )
+
+    produtos = []
+
+    for registro in registros:
+        produtos.append({
+            "id": registro[0],
+            "nome": registro[1],
+            "quantidade": registro[2],
+            "data_validade": registro[3],
+            "categoria": registro[4]
+        })
+
+    return produtos
 
 @app.post("/produtos", status_code=201)
 def cadastrar_produto(produto: ProdutoNovo):
@@ -211,6 +264,53 @@ def cadastrar_produto(produto: ProdutoNovo):
         "mensagem": "Produto cadastrado com sucesso!",
         "id": novo_id
     }
+
+
+@app.post("/teste-supabase/produtos", status_code=201)
+def cadastrar_produto_supabase(produto: ProdutoNovo):
+
+    try:
+        with conectar_supabase() as conexao:
+            with conexao.cursor() as cursor:
+
+                cursor.execute(
+                    """
+                    INSERT INTO public.produtos (
+                        nome,
+                        quantidade,
+                        data_validade,
+                        categoria
+                    )
+                    VALUES (%s, %s, %s, %s)
+                    RETURNING id
+                    """,
+                    (
+                        produto.nome,
+                        produto.quantidade,
+                        produto.data_validade,
+                        produto.categoria
+                    )
+                )
+
+                novo_id = cursor.fetchone()[0]
+
+    except psycopg.errors.UniqueViolation:
+        raise HTTPException(
+            status_code=409,
+            detail="Produto já cadastrado."
+        )
+
+    except psycopg.Error:
+        raise HTTPException(
+            status_code=503,
+            detail="Não foi possível cadastrar o produto no Supabase."
+        )
+
+    return {
+        "mensagem": "Produto cadastrado no Supabase com sucesso!",
+        "id": novo_id
+    }
+
 
 @app.put("/produtos/{produto_id}")
 def editar_produto(produto_id: int, produto: ProdutoNovo):
@@ -272,6 +372,61 @@ def editar_produto(produto_id: int, produto: ProdutoNovo):
         "id": produto_id
     }
 
+
+@app.put("/teste-supabase/produtos/{produto_id}")
+def editar_produto_supabase(
+    produto_id: int,
+    produto: ProdutoNovo
+):
+    try:
+        with conectar_supabase() as conexao:
+            with conexao.cursor() as cursor:
+
+                cursor.execute("""
+                    UPDATE public.produtos
+                    SET nome = %s,
+                        quantidade = %s,
+                        data_validade = %s,
+                        categoria = %s
+                    WHERE id = %s AND ativo = 1
+                    RETURNING id
+                """, (
+                    produto.nome,
+                    produto.quantidade,
+                    produto.data_validade,
+                    produto.categoria,
+                    produto_id
+                ))
+
+                atualizado = cursor.fetchone()
+
+                if atualizado is None:
+                    raise HTTPException(
+                        status_code=404,
+                        detail="Produto não encontrado."
+                    )
+
+    except HTTPException:
+        raise
+
+    except psycopg.errors.UniqueViolation:
+        raise HTTPException(
+            status_code=409,
+            detail="Já existe outro produto com esse nome."
+        )
+
+    except psycopg.Error:
+        raise HTTPException(
+            status_code=503,
+            detail="Não foi possível atualizar o produto no Supabase."
+        )
+
+    return {
+        "mensagem": "Produto atualizado no Supabase com sucesso!",
+        "id": produto_id
+    }
+
+
 @app.delete("/produtos/{produto_id}")
 def desativar_produto(produto_id: int):
 
@@ -301,6 +456,44 @@ def desativar_produto(produto_id: int):
         "mensagem": "Produto desativado com sucesso!",
         "id": produto_id
     }
+
+
+@app.delete("/teste-supabase/produtos/{produto_id}")
+def desativar_produto_supabase(produto_id: int):
+
+    try:
+        with conectar_supabase() as conexao:
+            with conexao.cursor() as cursor:
+
+                cursor.execute("""
+                    UPDATE public.produtos
+                    SET ativo = 0
+                    WHERE id = %s AND ativo = 1
+                    RETURNING id
+                """, (produto_id,))
+
+                produto = cursor.fetchone()
+
+                if produto is None:
+                    raise HTTPException(
+                        status_code=404,
+                        detail="Produto não encontrado ou já desativado."
+                    )
+
+    except HTTPException:
+        raise
+
+    except psycopg.Error:
+        raise HTTPException(
+            status_code=503,
+            detail="Não foi possível desativar o produto no Supabase."
+        )
+
+    return {
+        "mensagem": "Produto desativado no Supabase com sucesso!",
+        "id": produto_id
+    }
+
 
 @app.get("/movimentacoes")
 def consultar_movimentacoes():
@@ -338,6 +531,51 @@ def consultar_movimentacoes():
         })
 
     return movimentacoes
+
+
+@app.get("/teste-supabase/movimentacoes")
+def consultar_movimentacoes_supabase():
+
+    try:
+        with conectar_supabase() as conexao:
+            with conexao.cursor() as cursor:
+
+                cursor.execute("""
+                    SELECT
+                        id,
+                        produto_id,
+                        produto_nome,
+                        tipo,
+                        quantidade,
+                        saldo,
+                        data_hora
+                    FROM public.movimentacoes
+                    ORDER BY id DESC
+                """)
+
+                registros = cursor.fetchall()
+
+    except psycopg.Error:
+        raise HTTPException(
+            status_code=503,
+            detail="Não foi possível consultar as movimentações no Supabase."
+        )
+
+    movimentacoes = []
+
+    for registro in registros:
+        movimentacoes.append({
+            "id": registro[0],
+            "produto_id": registro[1],
+            "produto_nome": registro[2],
+            "tipo": registro[3],
+            "quantidade": registro[4],
+            "saldo": registro[5],
+            "data_hora": registro[6]
+        })
+
+    return movimentacoes
+
 
 @app.post("/produtos/{produto_id}/entrada")
 def registrar_entrada(produto_id: int, movimentacao: MovimentacaoNova):
@@ -407,6 +645,84 @@ def registrar_entrada(produto_id: int, movimentacao: MovimentacaoNova):
         "quantidade_entrada": movimentacao.quantidade,
         "novo_saldo": novo_saldo
     }
+
+
+@app.post("/teste-supabase/produtos/{produto_id}/entrada")
+def registrar_entrada_supabase(
+    produto_id: int,
+    movimentacao: MovimentacaoNova
+):
+    try:
+        with conectar_supabase() as conexao:
+            with conexao.cursor() as cursor:
+
+                # Bloqueia o produto durante a movimentação
+                cursor.execute("""
+                    SELECT nome, quantidade
+                    FROM public.produtos
+                    WHERE id = %s AND ativo = 1
+                    FOR UPDATE
+                """, (produto_id,))
+
+                produto = cursor.fetchone()
+
+                if produto is None:
+                    raise HTTPException(
+                        status_code=404,
+                        detail="Produto não encontrado ou desativado."
+                    )
+
+                nome, saldo_atual = produto
+
+                novo_saldo = saldo_atual + movimentacao.quantidade
+
+                # Atualiza a quantidade no estoque
+                cursor.execute("""
+                    UPDATE public.produtos
+                    SET quantidade = %s
+                    WHERE id = %s
+                """, (novo_saldo, produto_id))
+
+                # Registra o histórico da movimentação
+                data_hora = datetime.now().strftime(
+                    "%d/%m/%Y %H:%M:%S"
+                )
+
+                cursor.execute("""
+                    INSERT INTO public.movimentacoes (
+                        produto_id,
+                        produto_nome,
+                        tipo,
+                        quantidade,
+                        saldo,
+                        data_hora
+                    )
+                    VALUES (%s, %s, %s, %s, %s, %s)
+                """, (
+                    produto_id,
+                    nome,
+                    "ENTRADA",
+                    movimentacao.quantidade,
+                    novo_saldo,
+                    data_hora
+                ))
+
+    except HTTPException:
+        raise
+
+    except psycopg.Error:
+        raise HTTPException(
+            status_code=503,
+            detail="Não foi possível registrar a entrada no Supabase."
+        )
+
+    return {
+        "mensagem": "Entrada registrada no Supabase com sucesso!",
+        "produto_id": produto_id,
+        "quantidade_entrada": movimentacao.quantidade,
+        "novo_saldo": novo_saldo
+    }
+
 
 @app.post("/produtos/{produto_id}/saida")
 def registrar_saida(produto_id: int, movimentacao: MovimentacaoNova):
@@ -482,4 +798,126 @@ def registrar_saida(produto_id: int, movimentacao: MovimentacaoNova):
         "produto_id": produto_id,
         "quantidade_saida": movimentacao.quantidade,
         "novo_saldo": novo_saldo
-    }   
+    }
+
+
+@app.post("/teste-supabase/produtos/{produto_id}/saida")
+def registrar_saida_supabase(
+    produto_id: int,
+    movimentacao: MovimentacaoNova
+):
+    try:
+        with conectar_supabase() as conexao:
+            with conexao.cursor() as cursor:
+
+                cursor.execute("""
+                    SELECT nome, quantidade
+                    FROM public.produtos
+                    WHERE id = %s AND ativo = 1
+                    FOR UPDATE
+                """, (produto_id,))
+
+                produto = cursor.fetchone()
+
+                if produto is None:
+                    raise HTTPException(
+                        status_code=404,
+                        detail="Produto não encontrado ou desativado."
+                    )
+
+                nome, saldo_atual = produto
+
+                if movimentacao.quantidade > saldo_atual:
+                    raise HTTPException(
+                        status_code=400,
+                        detail="Estoque insuficiente."
+                    )
+
+                novo_saldo = saldo_atual - movimentacao.quantidade
+
+                cursor.execute("""
+                    UPDATE public.produtos
+                    SET quantidade = %s
+                    WHERE id = %s
+                """, (novo_saldo, produto_id))
+
+                data_hora = datetime.now().strftime(
+                    "%d/%m/%Y %H:%M:%S"
+                )
+
+                cursor.execute("""
+                    INSERT INTO public.movimentacoes (
+                        produto_id,
+                        produto_nome,
+                        tipo,
+                        quantidade,
+                        saldo,
+                        data_hora
+                    )
+                    VALUES (%s, %s, %s, %s, %s, %s)
+                """, (
+                    produto_id,
+                    nome,
+                    "SAÍDA",
+                    movimentacao.quantidade,
+                    novo_saldo,
+                    data_hora
+                ))
+
+    except HTTPException:
+        raise
+
+    except psycopg.Error:
+        raise HTTPException(
+            status_code=503,
+            detail="Não foi possível registrar a saída no Supabase."
+        )
+
+    return {
+        "mensagem": "Saída registrada no Supabase com sucesso!",
+        "produto_id": produto_id,
+        "quantidade_saida": movimentacao.quantidade,
+        "novo_saldo": novo_saldo
+    }
+
+
+@app.get("/teste-supabase/produtos/{produto_id}")
+def consultar_produto_supabase(produto_id: int):
+
+    try:
+        with conectar_supabase() as conexao:
+            with conexao.cursor() as cursor:
+
+                cursor.execute("""
+                    SELECT
+                        id,
+                        nome,
+                        quantidade,
+                        data_validade,
+                        categoria
+                    FROM public.produtos
+                    WHERE id = %s AND ativo = 1
+                """, (produto_id,))
+
+                registro = cursor.fetchone()
+
+    except psycopg.Error:
+        raise HTTPException(
+            status_code=503,
+            detail="Erro ao consultar produto no Supabase."
+        )
+
+    if registro is None:
+        raise HTTPException(
+            status_code=404,
+            detail="Produto não encontrado."
+        )
+
+    return {
+        "id": registro[0],
+        "nome": registro[1],
+        "quantidade": registro[2],
+        "data_validade": registro[3],
+        "categoria": registro[4]
+    }
+

@@ -17,6 +17,12 @@ from kivy.uix.spinner import Spinner
 # CONFIGURAÇÕES
 # ============================================================
 
+# Endereço da API
+API_URL = os.getenv(
+    "ESTOQUE_API_URL",
+    "http://127.0.0.1:8001"
+).rstrip("/")
+
 PASTA_PROJETO = os.path.dirname(
     os.path.abspath(__file__)
 )
@@ -343,6 +349,7 @@ def listar_movimentacoes_banco():
 
 class EstoqueApp(App):
 
+
     # --------------------------------------------------------
     # INICIAR APLICATIVO
     # --------------------------------------------------------
@@ -456,7 +463,7 @@ class EstoqueApp(App):
         self.layout.add_widget(self.categoria_input)
 
         btn_salvar = Button(
-            text="Salvar Produto",
+            text="Cadastrar Produto",
             size_hint_y=None,
             height=50
         )
@@ -473,6 +480,7 @@ class EstoqueApp(App):
     # SALVAR PRODUTO
     # --------------------------------------------------------
 
+    
     def salvar_produto(self, instance=None):
 
         nome = self.nome_input.text.strip()
@@ -515,7 +523,7 @@ class EstoqueApp(App):
 
         if categoria not in CATEGORIAS:
             self.mostrar_mensagem(
-                "Categoria inválida.\n"
+                "Categoria inválida."
             )
             return
 
@@ -528,9 +536,9 @@ class EstoqueApp(App):
 
         try:
             resposta = requests.post(
-                "http://127.0.0.1:8000/produtos",
+                "http://127.0.0.1:8000/teste-supabase/produtos",
                 json=dados,
-                timeout=5
+                timeout=10
             )
 
         except requests.RequestException as erro:
@@ -552,25 +560,27 @@ class EstoqueApp(App):
             )
             return
 
-            self.mostrar_mensagem(
-                f"Produto cadastrado com sucesso!\n\n"
-                f"Produto: {nome}\n"
-                f"Quantidade: {quantidade}\n"
-                f"Validade: {data_validade}\n"
-                f"Categoria: {categoria}"
-            )
+        self.mostrar_mensagem(
+            f"Produto cadastrado no Supabase!\n\n"
+            f"Produto: {nome}\n"
+            f"Quantidade: {quantidade}\n"
+            f"Validade: {data_validade}\n"
+            f"Categoria: {categoria}"
+        )
+
 
     # --------------------------------------------------------
     # LISTAR PRODUTOS
     # --------------------------------------------------------
 
+    
     def tela_listagem(self, instance=None):
 
         self.layout.clear_widgets()
 
         self.layout.add_widget(
             Label(
-                text="LISTA DE PRODUTOS - SQLITE",
+                text="LISTA DE PRODUTOS - SUPABASE",
                 font_size=22,
                 size_hint_y=None,
                 height=50
@@ -589,13 +599,27 @@ class EstoqueApp(App):
             minimum_height=lista.setter("height")
         )
 
-        produtos = listar_produtos_banco()
+        # Consulta os produtos na nuvem pelo FastAPI
+        try:
+            resposta = requests.get(
+                f"{API_URL}/teste-supabase/produtos",
+                timeout=10
+            )
+
+            resposta.raise_for_status()
+            produtos = resposta.json()
+
+        except (requests.RequestException, ValueError) as erro:
+            self.mostrar_mensagem(
+                f"Erro ao consultar produtos no Supabase:\n{erro}"
+            )
+            produtos = []
 
         if len(produtos) == 0:
 
             lista.add_widget(
                 Label(
-                    text="Nenhum produto cadastrado no banco.",
+                    text="Nenhum produto encontrado.",
                     size_hint_y=None,
                     height=60
                 )
@@ -605,11 +629,11 @@ class EstoqueApp(App):
 
             for produto in produtos:
 
-                id_produto = produto[0]
-                nome = produto[1]
-                quantidade = produto[2]
-                data_validade = produto[3]
-                categoria = produto[4]
+                id_produto = produto["id"]
+                nome = produto["nome"]
+                quantidade = produto["quantidade"]
+                data_validade = produto["data_validade"]
+                categoria = produto["categoria"]
 
                 texto = (
                     f"ID: {id_produto}\n"
@@ -633,6 +657,7 @@ class EstoqueApp(App):
 
         self.adicionar_botao_voltar()
 
+
     # --------------------------------------------------------
     # ESCOLHER PRODUTO PARA EDITAR
     # --------------------------------------------------------
@@ -643,18 +668,43 @@ class EstoqueApp(App):
 
         self.layout.add_widget(
             Label(
-                text="EDITAR PRODUTO - API",
+                text="EDITAR PRODUTO - SUPABASE",
                 font_size=22,
                 size_hint_y=None,
                 height=50
             )
         )
 
-        produtos = listar_produtos_banco()
+        scroll = ScrollView()
+
+        lista = BoxLayout(
+            orientation="vertical",
+            size_hint_y=None,
+            spacing=10
+        )
+
+        lista.bind(
+            minimum_height=lista.setter("height")
+        )
+
+        try:
+            resposta = requests.get(
+                "http://127.0.0.1:8000/teste-supabase/produtos",
+                timeout=10
+            )
+
+            resposta.raise_for_status()
+            produtos = resposta.json()
+
+        except (requests.RequestException, ValueError) as erro:
+            self.mostrar_mensagem(
+                f"Erro ao consultar o Supabase:\n{erro}"
+            )
+            return
 
         if len(produtos) == 0:
 
-            self.layout.add_widget(
+            lista.add_widget(
                 Label(
                     text="Nenhum produto cadastrado.",
                     size_hint_y=None,
@@ -666,9 +716,9 @@ class EstoqueApp(App):
 
             for produto in produtos:
 
-                id_produto = produto[0]
-                nome = produto[1]
-                quantidade = produto[2]
+                id_produto = produto["id"]
+                nome = produto["nome"]
+                quantidade = produto["quantidade"]
 
                 botao = Button(
                     text=(
@@ -680,14 +730,29 @@ class EstoqueApp(App):
                     height=50
                 )
 
+                # Mantém o formato esperado
+                # pela função tela_edicao()
+                produto_edicao = (
+                    produto["id"],
+                    produto["nome"],
+                    produto["quantidade"],
+                    produto["data_validade"],
+                    produto["categoria"]
+                )
+
                 botao.bind(
-                    on_press=lambda instance, p=produto:
+                    on_press=lambda instance, p=produto_edicao:
                     self.tela_edicao(p)
                 )
 
-                self.layout.add_widget(botao)
+                lista.add_widget(botao)
+
+        scroll.add_widget(lista)
+
+        self.layout.add_widget(scroll)
 
         self.adicionar_botao_voltar()
+ 
     # --------------------------------------------------------
     # FORMULÁRIO DE EDIÇÃO
     # --------------------------------------------------------
@@ -819,34 +884,63 @@ class EstoqueApp(App):
             )
             return
 
+        # Consulta o saldo atual no Supabase
+        # para não alterar o estoque sem movimentação.
+        url = (
+            f"http://127.0.0.1:8000"
+            f"/teste-supabase/produtos/{id_produto}"
+        )
+
+        try:
+            consulta = requests.get(
+                url,
+                timeout=10
+            )
+
+            consulta.raise_for_status()
+            produto_atual = consulta.json()
+
+        except (requests.RequestException, ValueError):
+            self.mostrar_mensagem(
+                "Não foi possível consultar o produto.\n"
+                "Nenhuma alteração foi enviada."
+            )
+            return
+
+        # Impede alterar a quantidade pela tela de edição
+        if quantidade != produto_atual["quantidade"]:
+            self.mostrar_mensagem(
+                "Para alterar a quantidade, utilize\n"
+                "Entrada ou Saída de Estoque."
+            )
+            return
+
         dados = {
             "nome": nome,
-        "quantidade": quantidade,
-        "data_validade": data_validade,
-        "categoria": categoria
+            "quantidade": quantidade,
+            "data_validade": data_validade,
+            "categoria": categoria
         }
-
-        url = f"http://127.0.0.1:8000/produtos/{id_produto}"
 
         try:
             resposta = requests.put(
-            url,
+                url,
                 json=dados,
-            timeout=5
-        )
+                timeout=10
+            )
 
         except requests.RequestException as erro:
             self.mostrar_mensagem(
                 f"Erro de comunicação com a API:\n{erro}\n\n"
                 "Confira os dados antes de tentar novamente."
             )
-        return
+            return
 
         if resposta.status_code == 404:
             self.mostrar_mensagem(
-                "Produto não encontrado na API."
+                "Produto não encontrado no Supabase."
             )
-        return
+            return
 
         if resposta.status_code == 409:
             self.mostrar_mensagem(
@@ -861,9 +955,14 @@ class EstoqueApp(App):
             )
             return
 
-            self.mostrar_mensagem(
-                "Produto alterado com sucesso!"
-            )
+        self.mostrar_mensagem(
+            "Produto alterado no Supabase com sucesso!\n\n"
+            f"Produto: {nome}\n"
+            f"Quantidade: {quantidade}\n"
+            f"Validade: {data_validade}\n"
+            f"Categoria: {categoria}"
+        )
+
 
     # --------------------------------------------------------
     # EXCLUIR PRODUTO
@@ -875,18 +974,43 @@ class EstoqueApp(App):
 
         self.layout.add_widget(
             Label(
-                text="EXCLUIR PRODUTO - SQLITE",
+                text="EXCLUIR PRODUTO - SUPABASE",
                 font_size=22,
                 size_hint_y=None,
                 height=50
             )
         )
 
-        produtos = listar_produtos_banco()
+        scroll = ScrollView()
+
+        lista = BoxLayout(
+            orientation="vertical",
+            size_hint_y=None,
+            spacing=10
+        )
+
+        lista.bind(
+            minimum_height=lista.setter("height")
+        )
+
+        try:
+            resposta = requests.get(
+                "http://127.0.0.1:8000/teste-supabase/produtos",
+                timeout=10
+            )
+
+            resposta.raise_for_status()
+            produtos = resposta.json()
+
+        except (requests.RequestException, ValueError) as erro:
+            self.mostrar_mensagem(
+                f"Erro ao consultar o Supabase:\n{erro}"
+            )
+            return
 
         if len(produtos) == 0:
 
-            self.layout.add_widget(
+            lista.add_widget(
                 Label(
                     text="Nenhum produto cadastrado.",
                     size_hint_y=None,
@@ -898,9 +1022,9 @@ class EstoqueApp(App):
 
             for produto in produtos:
 
-                id_produto = produto[0]
-                nome = produto[1]
-                quantidade = produto[2]
+                id_produto = produto["id"]
+                nome = produto["nome"]
+                quantidade = produto["quantidade"]
 
                 botao = Button(
                     text=(
@@ -912,14 +1036,29 @@ class EstoqueApp(App):
                     height=50
                 )
 
+                # Formato esperado pela função
+                # confirmar_exclusao()
+                produto_exclusao = (
+                    produto["id"],
+                    produto["nome"],
+                    produto["quantidade"],
+                    produto["data_validade"],
+                    produto["categoria"]
+                )
+
                 botao.bind(
-                    on_press=lambda instance, p=produto:
+                    on_press=lambda instance, p=produto_exclusao:
                     self.confirmar_exclusao(p)
                 )
 
-                self.layout.add_widget(botao)
+                lista.add_widget(botao)
+
+        scroll.add_widget(lista)
+
+        self.layout.add_widget(scroll)
 
         self.adicionar_botao_voltar()
+
 
     # --------------------------------------------------------
     # CONFIRMAR EXCLUSÃO
@@ -984,40 +1123,63 @@ class EstoqueApp(App):
 
     def excluir_produto(self, id_produto, nome):
 
-        sucesso = excluir_produto_banco(id_produto)
+        url = (
+            f"http://127.0.0.1:8000"
+            f"/teste-supabase/produtos/{id_produto}"
+        )
 
-        if sucesso:
-            self.mostrar_mensagem(
-                f"Produto excluído com sucesso!\n\n"
-                f"Produto: {nome}\n"
-                f"ID: {id_produto}"
+        try:
+            resposta = requests.delete(
+                url,
+                timeout=10
             )
 
-        else:
+        except requests.RequestException as erro:
             self.mostrar_mensagem(
-                "Não foi possível excluir o produto.\n\n"
-                "Verifique a conexão com a API\n"
-                "e confira a lista antes de tentar novamente."
+                f"Erro de comunicação com a API:\n{erro}\n\n"
+                "Confira a lista de produtos antes "
+                "de tentar novamente."
             )
+            return
+
+        if resposta.status_code == 404:
+            self.mostrar_mensagem(
+                "Produto não encontrado ou já desativado."
+            )
+            return
+
+        if not resposta.ok:
+            self.mostrar_mensagem(
+                f"Erro ao desativar produto.\n"
+                f"Código: {resposta.status_code}"
+            )
+            return
+
+        self.mostrar_mensagem(
+            f"Produto desativado no Supabase!\n\n"
+            f"Produto: {nome}\n"
+            f"ID: {id_produto}"
+        )
+
 
     # --------------------------------------------------------
     # ENTRADA DE ESTOQUE
     # --------------------------------------------------------
 
+    
     def tela_entrada(self, instance=None):
 
         self.layout.clear_widgets()
 
         self.layout.add_widget(
             Label(
-                text="ENTRADA DE ESTOQUE - SQLITE",
+                text="ENTRADA DE ESTOQUE - SUPABASE",
                 font_size=22,
                 size_hint_y=None,
                 height=50
             )
         )
 
-        # Área com rolagem
         scroll = ScrollView()
 
         lista = BoxLayout(
@@ -1026,13 +1188,25 @@ class EstoqueApp(App):
             spacing=10
         )
 
-        # Faz a altura da lista crescer conforme
-        # novos produtos são adicionados
         lista.bind(
             minimum_height=lista.setter("height")
         )
 
-        produtos = listar_produtos_banco()
+        # Consulta os produtos ativos no Supabase
+        try:
+            resposta = requests.get(
+                "http://127.0.0.1:8000/teste-supabase/produtos",
+                timeout=10
+            )
+
+            resposta.raise_for_status()
+            produtos = resposta.json()
+
+        except (requests.RequestException, ValueError) as erro:
+            self.mostrar_mensagem(
+                f"Erro ao consultar o Supabase:\n{erro}"
+            )
+            return
 
         if len(produtos) == 0:
 
@@ -1048,9 +1222,9 @@ class EstoqueApp(App):
 
             for produto in produtos:
 
-                id_produto = produto[0]
-                nome = produto[1]
-                quantidade = produto[2]
+                id_produto = produto["id"]
+                nome = produto["nome"]
+                quantidade = produto["quantidade"]
 
                 botao = Button(
                     text=(
@@ -1062,8 +1236,18 @@ class EstoqueApp(App):
                     height=50
                 )
 
+                # Mantém o formato esperado pelo
+                # formulário antigo do Kivy
+                produto_formulario = (
+                    produto["id"],
+                    produto["nome"],
+                    produto["quantidade"],
+                    produto["data_validade"],
+                    produto["categoria"]
+                )
+
                 botao.bind(
-                    on_press=lambda instance, p=produto:
+                    on_press=lambda instance, p=produto_formulario:
                     self.formulario_entrada(p)
                 )
 
@@ -1074,6 +1258,7 @@ class EstoqueApp(App):
         self.layout.add_widget(scroll)
 
         self.adicionar_botao_voltar()
+
 
     # --------------------------------------------------------
     # FORMULÁRIO DE ENTRADA
@@ -1178,7 +1363,7 @@ class EstoqueApp(App):
 
         id_produto = self.entrada_id
 
-        url = f"http://127.0.0.1:8000/produtos/{id_produto}/entrada"
+        url = f"http://127.0.0.1:8000/teste-supabase/produtos/{id_produto}/entrada"
 
         try:
             resposta = requests.post(
@@ -1197,7 +1382,7 @@ class EstoqueApp(App):
 
             # Consultar o estoque atualizado na API
             resposta_produto = requests.get(
-                f"http://127.0.0.1:8000/produtos/{id_produto}",
+                f"http://127.0.0.1:8000/teste-supabase/produtos/{id_produto}",
                 timeout=5
             )
 
@@ -1222,13 +1407,14 @@ class EstoqueApp(App):
     # SAÍDA DE ESTOQUE
     # --------------------------------------------------------
 
+    
     def tela_saida(self, instance=None):
 
         self.layout.clear_widgets()
 
         self.layout.add_widget(
             Label(
-                text="SAÍDA DE ESTOQUE - SQLITE",
+                text="SAÍDA DE ESTOQUE - SUPABASE",
                 font_size=22,
                 size_hint_y=None,
                 height=50
@@ -1247,7 +1433,21 @@ class EstoqueApp(App):
             minimum_height=lista.setter("height")
         )
 
-        produtos = listar_produtos_banco()
+        # Consultar produtos no Supabase
+        try:
+            resposta = requests.get(
+                "http://127.0.0.1:8000/teste-supabase/produtos",
+                timeout=10
+            )
+
+            resposta.raise_for_status()
+            produtos = resposta.json()
+
+        except (requests.RequestException, ValueError) as erro:
+            self.mostrar_mensagem(
+                f"Erro ao consultar o Supabase:\n{erro}"
+            )
+            return
 
         if len(produtos) == 0:
 
@@ -1263,9 +1463,9 @@ class EstoqueApp(App):
 
             for produto in produtos:
 
-                id_produto = produto[0]
-                nome = produto[1]
-                quantidade = produto[2]
+                id_produto = produto["id"]
+                nome = produto["nome"]
+                quantidade = produto["quantidade"]
 
                 botao = Button(
                     text=(
@@ -1277,8 +1477,18 @@ class EstoqueApp(App):
                     height=50
                 )
 
+                # Converter os dados para o formato
+                # esperado pelo formulário de saída
+                produto_formulario = (
+                    produto["id"],
+                    produto["nome"],
+                    produto["quantidade"],
+                    produto["data_validade"],
+                    produto["categoria"]
+                )
+
                 botao.bind(
-                    on_press=lambda instance, p=produto:
+                    on_press=lambda instance, p=produto_formulario:
                     self.formulario_saida(p)
                 )
 
@@ -1289,6 +1499,7 @@ class EstoqueApp(App):
         self.layout.add_widget(scroll)
 
         self.adicionar_botao_voltar()
+
 
     # --------------------------------------------------------
     # FORMULÁRIO DE SAÍDA
@@ -1392,13 +1603,16 @@ class EstoqueApp(App):
 
         id_produto = self.saida_id
 
-        url = f"http://127.0.0.1:8000/produtos/{id_produto}/saida"
+        url = (
+            f"http://127.0.0.1:8000"
+            f"/teste-supabase/produtos/{id_produto}/saida"
+        )
 
         try:
             resposta = requests.post(
                 url,
                 json={"quantidade": quantidade_saida},
-                timeout=5
+                timeout=10
             )
 
         except requests.RequestException as erro:
@@ -1410,14 +1624,13 @@ class EstoqueApp(App):
 
         if resposta.status_code == 404:
             self.mostrar_mensagem(
-                "Produto não encontrado na API."
+                "Produto não encontrado no Supabase."
             )
             return
 
         if resposta.status_code == 400:
             self.mostrar_mensagem(
-                "Saída não autorizada pela API.\n"
-                "Verifique se existe estoque suficiente."
+                "Estoque insuficiente para essa saída."
             )
             return
 
@@ -1428,18 +1641,19 @@ class EstoqueApp(App):
             )
             return
 
-            # Consulta o produto atualizado
+        # A saída foi aceita pela API.
+        # Agora consulta o estoque atualizado.
         try:
             resposta_produto = requests.get(
-                f"http://127.0.0.1:8000/produtos/{id_produto}",
-                timeout=5
+                f"http://127.0.0.1:8000"
+                f"/teste-supabase/produtos/{id_produto}",
+                timeout=10
             )
 
             resposta_produto.raise_for_status()
-
             produto = resposta_produto.json()
 
-        except requests.RequestException:
+        except (requests.RequestException, ValueError):
             self.mostrar_mensagem(
                 "Saída aceita pela API!\n\n"
                 "Não foi possível consultar o novo estoque.\n"
@@ -1447,12 +1661,13 @@ class EstoqueApp(App):
             )
             return
 
-            self.mostrar_mensagem(
-                f"Saída registrada!\n\n"
-                f"Produto: {produto['nome']}\n"
-                f"Saída: {quantidade_saida}\n"
-                f"Novo estoque: {produto['quantidade']}"
-            )
+        self.mostrar_mensagem(
+            f"Saída registrada no Supabase!\n\n"
+            f"Produto: {produto['nome']}\n"
+            f"Saída: {quantidade_saida}\n"
+            f"Novo estoque: {produto['quantidade']}"
+        )
+
 
         # --------------------------------------------------------
     # HISTÓRICO DE MOVIMENTAÇÕES
@@ -1545,15 +1760,28 @@ class EstoqueApp(App):
 
         self.layout.add_widget(
             Label(
-                text="RELATÓRIO DE ESTOQUE - SQLITE",
+                text="RELATÓRIO DE ESTOQUE - SUPABASE",
                 font_size=22,
                 size_hint_y=None,
                 height=50
             )
         )
 
-        # Busca os produtos diretamente no SQLite
-        produtos = listar_produtos_banco()
+        # Consulta os produtos ativos no Supabase
+        try:
+            resposta = requests.get(
+                "http://127.0.0.1:8000/teste-supabase/produtos",
+                timeout=10
+            )
+
+            resposta.raise_for_status()
+            produtos = resposta.json()
+
+        except (requests.RequestException, ValueError) as erro:
+            self.mostrar_mensagem(
+                f"Erro ao consultar o Supabase:\n{erro}"
+            )
+            return
 
         if len(produtos) == 0:
 
@@ -1570,7 +1798,7 @@ class EstoqueApp(App):
             total_produtos = len(produtos)
 
             total_quantidade = sum(
-                produto[2]
+                produto["quantidade"]
                 for produto in produtos
             )
 
@@ -1602,9 +1830,9 @@ class EstoqueApp(App):
 
             for produto in produtos:
 
-                id_produto = produto[0]
-                nome = produto[1]
-                quantidade = produto[2]
+                id_produto = produto["id"]
+                nome = produto["nome"]
+                quantidade = produto["quantidade"]
 
                 lista.add_widget(
                     Label(
@@ -1619,10 +1847,10 @@ class EstoqueApp(App):
                 )
 
             scroll.add_widget(lista)
-
             self.layout.add_widget(scroll)
 
         self.adicionar_botao_voltar()
+
 
     # --------------------------------------------------------
     # ALERTAS
@@ -1634,30 +1862,41 @@ class EstoqueApp(App):
 
         self.layout.add_widget(
             Label(
-                text="ALERTAS DE ESTOQUE - SQLITE",
+                text="ALERTAS DE ESTOQUE - SUPABASE",
                 font_size=22,
                 size_hint_y=None,
                 height=50
             )
         )
 
-        produtos = listar_produtos_banco()
+        # Consulta os produtos ativos no Supabase
+        try:
+            resposta = requests.get(
+                "http://127.0.0.1:8000/teste-supabase/produtos",
+                timeout=10
+            )
 
-        hoje = datetime.datetime.now()
+            resposta.raise_for_status()
+            produtos = resposta.json()
+
+        except (requests.RequestException, ValueError) as erro:
+            self.mostrar_mensagem(
+                f"Erro ao consultar o Supabase:\n{erro}"
+            )
+            return
+
+        hoje = datetime.datetime.now().date()
 
         alertas = []
 
         for produto in produtos:
 
-            id_produto = produto[0]
-            nome = produto[1]
-            quantidade = produto[2]
-            data_validade = produto[3]
+            id_produto = produto["id"]
+            nome = produto["nome"]
+            quantidade = produto["quantidade"]
+            data_validade = produto["data_validade"]
 
-            # -------------------------
             # ALERTA DE ESTOQUE BAIXO
-            # -------------------------
-
             if quantidade <= 5:
 
                 alertas.append(
@@ -1666,16 +1905,12 @@ class EstoqueApp(App):
                     f"Quantidade: {quantidade}"
                 )
 
-            # -------------------------
             # ALERTA DE VALIDADE
-            # -------------------------
-
             try:
-
                 validade = datetime.datetime.strptime(
                     data_validade,
                     "%d/%m/%Y"
-                )
+                ).date()
 
                 dias_restantes = (
                     validade - hoje
@@ -1695,11 +1930,10 @@ class EstoqueApp(App):
                         f"VALIDADE PRÓXIMA\n"
                         f"ID: {id_produto} - {nome}\n"
                         f"Validade: {data_validade}\n"
-                        f"Faltam aproximadamente "
-                        f"{dias_restantes} dias"
+                        f"Faltam {dias_restantes} dias"
                     )
 
-            except ValueError:
+            except (ValueError, TypeError):
 
                 alertas.append(
                     f"DATA INVÁLIDA\n"
@@ -1707,10 +1941,7 @@ class EstoqueApp(App):
                     f"Validade: {data_validade}"
                 )
 
-        # -------------------------
         # MOSTRAR ALERTAS
-        # -------------------------
-
         if len(alertas) == 0:
 
             self.layout.add_widget(
@@ -1741,15 +1972,15 @@ class EstoqueApp(App):
                     Label(
                         text=alerta,
                         size_hint_y=None,
-                        height=100
+                        height=110
                     )
                 )
 
             scroll.add_widget(lista)
-
             self.layout.add_widget(scroll)
 
         self.adicionar_botao_voltar()
+
 
     # --------------------------------------------------------
     # MOSTRAR MENSAGEM
