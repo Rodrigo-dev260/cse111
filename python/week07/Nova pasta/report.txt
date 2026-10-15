@@ -1,0 +1,23 @@
+CSE 111 - Final Project Work Report
+Project: Inventory Control System (Storage Control)
+
+WORK LOG
+
+Date         Work performed                                  Hours
+------------ ------------------------------------------------ -----
+10/08       Planning and defining project requirements      4h
+10/09       Developing inventory management functions       3h
+10/09       Implementing CSV file storage                   1h
+10/10       Implementing validation, reports, and alerts    3h
+10/10       Translating program and data into English       1h
+10/11       Writing and improving automated tests           3h
+10/13       Debugging, testing, and final review            3h
+------------ ------------------------------------------------ -----
+TOTAL TIME REPORTED BY STUDENT: 18 hours
+
+Note: Replace the bracketed dates and hours with your actual work
+records. Adjust or remove activity rows to reflect the work you
+actually completed. The individual hours must add up to 18.
+
+The official report.txt template was not provided, so the table
+format should be checked against the course's required example.
