@@ -1,0 +1,70 @@
+CSE 111 Proposal for a Student Chosen Program
+
+1. What is the title of your program?
+
+   Inventory Control System (Storage Control)
+
+2. What real-world problem will your program address or help to solve?
+
+   My program will help small kitchens, food services, and other businesses
+   organize their inventory. It will record product names, categories,
+   quantities, and expiration dates in a CSV file. Users will be able to
+   register products, view inventory, record stock received or used, and
+   generate category reports. The program will also warn users about low
+   stock and products that are near or past their expiration dates. These
+   features can help reduce waste and improve inventory organization.
+
+3. What will you learn from developing this program?
+
+   I will practice organizing a Python program into functions, reading and
+   writing CSV files, validating user input, working with dates, using
+   dictionaries and lists, and handling errors. I will also practice
+   writing automated tests with pytest and assert statements.
+
+4. What Python modules will your program use?
+
+   - csv: Read and write product records in a CSV file.
+   - datetime: Validate expiration dates and check expiration alerts.
+   - pathlib: Locate the inventory CSV file relative to the program.
+   - pytest: Run automated tests in the separate test file.
+   - unittest.mock: Help simulate user input during tests.
+
+5. List the names of functions you will need?
+
+   - main_menu(): Display the menu and run the selected action.
+   - load_inventory(): Read product data from the CSV file.
+   - save_inventory(): Write product data to the CSV file.
+   - validate_date(date_string): Check whether a date has the required format.
+   - choose_category(): Ask the user to select a product category.
+   - register_product(): Add a new product to inventory.
+   - list_inventory(): Display the complete inventory.
+   - record_stock_in(): Increase the quantity of a selected product.
+   - record_stock_out(): Decrease the quantity of a selected product.
+   - check_alerts(): Show low-stock and expiration warnings.
+   - report_by_category(): Display products in a selected category.
+
+   To improve reusability, I may later separate input and output from
+   inventory calculations and validation functions.
+
+6. List the names of the test functions you will write.
+
+   - test_validate_date_accepts_valid_dates()
+   - test_validate_date_rejects_invalid_dates()
+   - test_load_inventory_when_file_is_missing()
+   - test_save_and_load_inventory()
+   - test_save_inventory_writes_english_headers()
+   - test_choose_category()
+   - test_register_product()
+   - test_register_product_rejects_invalid_data()
+   - test_list_inventory_empty()
+   - test_list_inventory_displays_products()
+   - test_record_stock_in_increases_quantity()
+   - test_record_stock_in_rejects_negative_quantity()
+   - test_record_stock_out_decreases_quantity()
+   - test_record_stock_out_rejects_invalid_quantity()
+   - test_stock_operations_reject_invalid_product_number()
+   - test_check_alerts_low_stock()
+   - test_check_alerts_expired_product()
+   - test_check_alerts_no_alerts()
+   - test_report_by_category_filters_products()
+   - test_main_menu_exits()
